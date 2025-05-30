@@ -7,7 +7,10 @@ from pandas.core.dtypes.common import is_numeric_dtype
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.cluster import KMeans
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import geopandas as gpd
+import statsmodels.api as sm
 
 def nan_replace_t(t:pd.DataFrame):
     """
@@ -34,6 +37,25 @@ def heatmap(t:pd.DataFrame):
     """
     fig, ax = plt.subplots(figsize=(8,5))
     sns.heatmap(t.corr(numeric_only=True), annot=True, cmap="coolwarm", ax=ax)
+    return fig
+
+def map_life_expectancy_by_country(df):
+    """
+    Creează o hartă cu speranța de viață per țară folosind GeoPandas.
+    Presupune că în df există o coloană 'Country' cu denumiri standardizate.
+    """
+    # Încărcăm geometria lumii
+    world = gpd.read_file("date_in/map_units/ne_110m_admin_0_map_units.shp")
+
+    # Facem merge pe țară
+    df_country = df[["Country", "Life_expectancy"]]
+    merged = world.merge(df_country, how="left", left_on="NAME", right_on="Country")
+
+    # Cream harta
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    merged.plot(column='Life_expectancy', cmap='RdYlGn', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+    ax.set_title('Speranța de viață per țară', fontdict={'fontsize': 15})
+    ax.axis('off')
     return fig
 
 def find_outliers_iqr(df, col):
@@ -78,35 +100,31 @@ def standardizare_col(t:pd.DataFrame, col):
     scaler = StandardScaler()
     t[col] = scaler.fit_transform(t[[col]])
 
-def calcul_regresie_liniara(t:pd.DataFrame):
+def kmeans_clusterizare(df, numeric_cols, n_clusters=3):
     """
-    Aceasta functie antreneaza si ruleaza un model de regresie liniara
-    utilizand LinearRegression din modulul scikit-learn.
-    :param t:
-    :return:
+    Aceasta functie aplica KMeans pe coloanele numerice si returneaza dataframe-ul cu clusterul asignat.
+    """
+    df_copy = df.copy(deep=True)
+
+    # Scalare
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df_copy[numeric_cols])
+
+    # KMeans
+    model = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+    df_copy['Cluster'] = model.fit_predict(X_scaled)
+
+    return df_copy, model
+
+def regresie_multipla_statsmodels(t: pd.DataFrame):
+    """
+    Aceasta functie antrenează un model de regresie multiplă folosind pachetul statsmodels.
     """
     target = 'Life_expectancy'
-
-    # Eliminăm coloana țintă din setul de caracteristici
-    X = t.drop([target], axis=1)
+    X = t.drop(columns=[target])
     y = t[target]
 
-    # Împărțim datele în seturi de antrenare (80%) și test (20%)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X = sm.add_constant(X)
 
-    # Inițializăm și antrenăm modelul de regresie liniară
-    lr_model = LinearRegression()
-    lr_model.fit(X_train, y_train)
-
-    # Facem predicții pe setul de test
-    y_pred = lr_model.predict(X_test)
-
-    # Valorile reale
-    y_test_original = y_test
-
-    # Calculăm metrici de evaluare pe scara originală
-    mae = mean_absolute_error(y_test_original, y_pred)
-    mse = mean_squared_error(y_test_original, y_pred)
-    r2 = r2_score(y_test_original, y_pred)
-
-    return mae,mse,r2
+    model = sm.OLS(y, X).fit()
+    return model

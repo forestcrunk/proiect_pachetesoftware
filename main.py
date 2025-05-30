@@ -5,6 +5,7 @@ from functii import *
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
+import geopandas as gpd
 
 set_date = pd.read_csv("date_in/set de date.csv")
 set2 = pd.read_csv("date_in/set de date 2.csv")
@@ -63,9 +64,27 @@ if section == "Vizualizare si analiza date":
 
     st.write("Dimensiunea setului de date este: " + str(df.shape))
 
+    
+    st.subheader("Hartă geografică a speranței de viață")
+    st.pyplot(map_life_expectancy_by_country(df))
+    st.write("Aici avem o vizualizare a speranței de viață în țările din setul de date utilizând pachetul GeoPandas. Țările sunt colorate pe baza speranței de viață, culoarea verde-închis reprezentând cea mai mare valoare, iar roșu-închis reprezentând cea mai mică valoare.")
+
 
     st.subheader("Statistici descriptive ale setului de date")
     st.write(df.describe())
+
+    st.subheader("Media speranței de viață pe categorii de PIB pe cap de locuitor")
+    
+    new_df = df.copy(deep=True)
+    new_df['Categorie_PIB'] = pd.cut(new_df['GDP_per_capita'],
+                                  bins=[0, 15000, 30000, 45000, new_df['GDP_per_capita'].max()],
+                                  labels=['Scăzut (0 - 15.000)', 
+                                          'Mediu (15.000 - 30.000)', 
+                                          'Ridicat (30.000 - 45.000)', 
+                                          'Foarte ridicat (45.000+)'])
+
+    grouped_pib = new_df.groupby('Categorie_PIB')['Life_expectancy'].mean().reset_index()
+    st.dataframe(grouped_pib)
 
     st.subheader("Corelatii intre variabile")
     st.pyplot(heatmap(df))
@@ -93,12 +112,13 @@ if section == "Vizualizare si analiza date":
     st.write("Media coloanei dupa standardizare: ", df_standardized['Life_expectancy'].mean())
     st.write("Deviatia standard a coloanei dupa standardizare: ", df_standardized['Life_expectancy'].std())
 
-    st.subheader("Rezultatele regresiei liniare")
-    lr_mae,lr_mse,lr_r2 = calcul_regresie_liniara(df_standardized[variabile_numerice])
-    st.write("In urma antrenarii unui model de regresie liniara pe setul de date cu coloana 'Life_expectancy' standardizata, am obtinut urmatoarele rezultate:")
-    st.write("  Mean Absolute Error (MAE):", lr_mae)
-    st.write("  Mean Squared Error (MSE):", lr_mse)
-    st.write("  R2 Score:", lr_r2)
+    
+
+    st.subheader("Rezultatele regresiei multiple")
+    st.write("In urma antrenarii unui model de regresie liniara multiplă pe setul de date cu coloana 'Life_expectancy' standardizata, cu ajutorul pachetului statsmodels, am obtinut urmatoarele rezultate:")
+    model = regresie_multipla_statsmodels(df_standardized[variabile_numerice])
+    st.write(model.summary())
+    st.write("Prin analiza acestui output, putem determina că variabilele independente prezente în setul de date aproximează într-un mod adecvat speranța de viață pentru țara respectivă, deoarece valoarea R-squared semnifică faptul că modelul este explicat în proporție de 68.3% de variabilele prezente.")
 
 
 # ----
@@ -136,3 +156,16 @@ elif section == "Grafice":
 
     st.subheader("Pairplot pentru variabile")
     st.pyplot(plot_pairplot_numeric(df, variabile_numerice))
+
+    st.subheader("Clusterizare KMeans")
+    df_clustered, model = kmeans_clusterizare(df, variabile_numerice, n_clusters=3)
+    fig_cluster = px.scatter(df_clustered,
+                             x="CHE_GDP_ratio",
+                             y="Life_expectancy",
+                             color=df_clustered["Cluster"].astype(str),
+                             size="GDP_per_capita",
+                             hover_name="Country",
+                             title="Clusterizarea țărilor după indicatorii socio-economici",
+                             labels={"CHE_GDP_ratio": "CHE % din PIB", "Life_expectancy": "Speranța de viață"})
+    st.plotly_chart(fig_cluster)
+    st.write("Țările au fost împărțite în 3 clustere în funcție de cele 3 variabile numerice. Fiecare cluster indică un grup omogen de țări.")
