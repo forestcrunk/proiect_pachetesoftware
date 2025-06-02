@@ -8,7 +8,6 @@ import plotly.express as px
 import geopandas as gpd
 
 set_date = pd.read_csv("date_in/set de date.csv")
-set2 = pd.read_csv("date_in/set de date 2.csv")
 df = set_date.copy(deep=True)
 variabile_numerice = ['Life_expectancy','CHE_GDP_ratio','GDP_per_capita']
 
